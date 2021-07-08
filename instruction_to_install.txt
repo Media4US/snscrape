@@ -1,0 +1,5 @@
+use:
+
+pip install /srv/pkg/mypackage
+
+to install this local package, where /srv/pkg/mypackage is the absolute path of this directory.
