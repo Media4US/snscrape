@@ -1,0 +1,5 @@
+1. Clone the repo (https://github.com/Media4US/snscrape.git)
+2. Go to the folder where the repo is
+3. Copy the absolute path of the folder
+4. Do a "pip install" pointing to the absolute path. Eg: "pip install /home/media4us/Documents/Media4us/Dev/snscrape"
+
