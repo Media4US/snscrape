@@ -1,3 +1,0 @@
-- first find the absolute path of this folder via command 'pwd'
-- then use the absolute path with the command 'pip install' to install it:
-    pip install absolute/path/of/this/folder
