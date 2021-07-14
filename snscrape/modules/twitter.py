@@ -566,7 +566,7 @@ class TwitterUserScraper(TwitterSearchScraper):
 			mediaCount = user['legacy']['media_count'],
 			location = user['legacy']['location'],
 			protected = user['legacy']['protected'],
-			linkUrl = user['legacy']['entities']['url']['urls'][0]['expanded_url'] if 'url' in user['legacy']['entities'] else None,
+			linkUrl = user['legacy']['entities']['url']['urls'][0]['expanded_url'] if 'url' in user['legacy']['entities'] and 'expanded_url' in user['legacy']['entities']['url']['urls'][0] else None,
 			linkTcourl = user['legacy'].get('url'),
 			profileImageUrl = user['legacy']['profile_image_url_https'],
 			profileBannerUrl = user['legacy'].get('profile_banner_url'),
