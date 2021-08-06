@@ -156,12 +156,16 @@ class TwitterAPIScraper(snscrape.base.Scraper):
 		super().__init__(**kwargs)
 		self._baseUrl = baseUrl
 		self._guestToken = None
-		self._userAgent = f'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.{random.randint(0, 9999)} Safari/537.{random.randint(0, 99)}'
+		self._userAgent = f'Mozilla/5.0 (X11; Linux x86_64; Windows NT 10.0; Win64; x64; Xbox; Xbox One) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.{random.randint(0, 9999)} Safari/537.{random.randint(0, 99)} Edge/91.0.864.{random.randint(0, 9999)}'
 		self._apiHeaders = {
 			'User-Agent': self._userAgent,
 			'Authorization': _API_AUTHORIZATION_HEADER,
 			'Referer': self._baseUrl,
 			'Accept-Language': 'en-US,en;q=0.5',
+			'Accept-Encoding':'gzip, deflate',
+			'Connection':'keep-alive',
+			'Upgrade-Insecure-Requests': '1',
+			'accept': '*/*'
 		}
 
 	def _ensure_guest_token(self, url = None):
