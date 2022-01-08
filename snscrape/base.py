@@ -33,26 +33,30 @@ def _json_serialise_datetime(obj):
 
 
 def _json_dataclass_to_dict(obj):
-    if isinstance(obj, _JSONDataclass) or dataclasses.is_dataclass(obj):
-        out = {}
-        out['_type'] = f'{type(obj).__module__}.{type(obj).__name__}'
-        for field in dataclasses.fields(obj):
-            assert field.name != '_type'
-            out[field.name] = _json_dataclass_to_dict(getattr(obj, field.name))
-        # Add in (non-deprecated) properties
-        for k in dir(obj):
-            if isinstance(getattr(type(obj), k, None), property):
-                assert k != '_type'
-                out[k] = _json_dataclass_to_dict(getattr(obj, k))
-        return out
-    elif isinstance(obj, (tuple, list)):
-        return type(obj)(_json_dataclass_to_dict(x) for x in obj)
-    elif isinstance(obj, dict):
-        return {_json_dataclass_to_dict(k): _json_dataclass_to_dict(v) for k, v in obj.items()}
-    elif isinstance(obj, set):
-        return {_json_dataclass_to_dict(v) for v in obj}
-    else:
-        return copy.deepcopy(obj)
+	if isinstance(obj, _JSONDataclass) or dataclasses.is_dataclass(obj):
+		out = {}
+		out['_type'] = f'{type(obj).__module__}.{type(obj).__name__}'
+		for field in dataclasses.fields(obj):
+			assert field.name != '_type'
+			if field.name.startswith('_'):
+				continue
+			out[field.name] = _json_dataclass_to_dict(getattr(obj, field.name))
+		# Add in (non-deprecated) properties
+		for k in dir(obj):
+			if isinstance(getattr(type(obj), k, None), property):
+				assert k != '_type'
+				if k.startswith('_'):
+					continue
+				out[k] = _json_dataclass_to_dict(getattr(obj, k))
+		return out
+	elif isinstance(obj, (tuple, list)):
+		return type(obj)(_json_dataclass_to_dict(x) for x in obj)
+	elif isinstance(obj, dict):
+		return {_json_dataclass_to_dict(k): _json_dataclass_to_dict(v) for k, v in obj.items()}
+	elif isinstance(obj, set):
+		return {_json_dataclass_to_dict(v) for v in obj}
+	else:
+		return copy.deepcopy(obj)
 
 
 @dataclasses.dataclass
@@ -74,7 +78,8 @@ class _JSONDataclass:
 class Item(_JSONDataclass):
     '''An abstract base class for an item returned by the scraper's get_items generator.
 
-	An item can really be anything. The string representation should be useful for the CLI output (e.g. a direct URL for the item).'''
+	An item can really be anything. The string representation should be useful for the CLI output (e.g. a direct URL for the item).
+	'''
 
     @abc.abstractmethod
     def __str__(self):
@@ -85,7 +90,8 @@ class Item(_JSONDataclass):
 class Entity(_JSONDataclass):
     '''An abstract base class for an entity returned by the scraper's entity property.
 
-	An entity is typically the account of a person or organisation. The string representation should be the preferred direct URL to the entity's page on the network.'''
+	An entity is typically the account of a person or organisation. The string representation should be the preferred direct URL to the entity's page on the network.
+	'''
 
     @abc.abstractmethod
     def __str__(self):
@@ -95,7 +101,8 @@ class Entity(_JSONDataclass):
 class IntWithGranularity(int):
     '''A number with an associated granularity
 
-	For example, an IntWithGranularity(42000, 1000) represents a number on the order of 42000 with two significant digits, i.e. something counted with a granularity of 1000.'''
+	For example, an IntWithGranularity(42000, 1000) represents a number on the order of 42000 with two significant digits, i.e. something counted with a granularity of 1000.
+	'''
 
     def __new__(cls, value, granularity, *args, **kwargs):
         obj = super().__new__(cls, value, *args, **kwargs)
@@ -136,6 +143,11 @@ class Scraper:
 
     def set_proxies(self, proxies: dict):
         self._proxies = proxies
+	@abc.abstractmethod
+	def get_items(self):
+		'''Iterator yielding Items.'''
+
+		pass
 
     @abc.abstractmethod
     def get_items(self):
@@ -210,8 +222,28 @@ class Scraper:
     @abc.abstractmethod
     def setup_parser(cls, subparser):
         pass
+	@classmethod
+	def cli_setup_parser(cls, subparser):
+		pass
 
     @classmethod
     @abc.abstractmethod
     def from_args(cls, args):
         pass
+	@classmethod
+	def cli_from_args(cls, args):
+		return cls._construct(args)
+
+	@classmethod
+	def cli_construct(cls, argparseArgs, *args, **kwargs):
+		return cls(*args, **kwargs, retries = argparseArgs.retries)
+
+
+def nonempty_string(name):
+	def f(s):
+		s = s.strip()
+		if s:
+			return s
+		raise ValueError('must not be an empty string')
+	f.__name__ = name
+	return f

@@ -3,6 +3,7 @@ import collections
 import contextlib
 import dataclasses
 import datetime
+import importlib.metadata
 import inspect
 import logging
 import requests
@@ -100,7 +101,7 @@ def _repr(name, value):
 	if isinstance(value, (list, tuple, collections.deque)) and not all(isinstance(v, (int, str)) for v in value):
 		return f'{name} = <{type(value).__module__}.{type(value).__name__}>\n  ' + \
 		       '\n  '.join(_repr(f'{name}[{i}]', v).replace('\n', '\n  ') for i, v in enumerate(value))
-	if dataclasses.is_dataclass(value):
+	if dataclasses.is_dataclass(value) and not isinstance(value, type):
 		return f'{name} = <{type(value).__module__}.{type(value).__name__}>\n  ' + \
 		       '\n  '.join(_repr(f'{name}.{f.name}', f.name) + ' = ' + _repr(f'{name}.{f.name}', getattr(value, f.name)).replace('\n', '\n  ') for f in dataclasses.fields(value))
 	valueRepr = f'{name} = {value!r}'
@@ -193,6 +194,29 @@ def parse_format(arg):
 	return out
 
 
+class CitationAction(argparse.Action):
+	def __init__(self, option_strings, dest = argparse.SUPPRESS, *args, default = argparse.SUPPRESS, **kwargs):
+		super().__init__(option_strings, dest, *args, **kwargs)
+
+	def __call__(self, parser, namespace, values, optionString):
+		try:
+			m = importlib.metadata.metadata('snscrape')
+		except importlib.metadata.PackageNotFoundError:
+			print('Error: could not find snscrape installation. --citation does not work without the package being installed.', file = sys.stderr)
+			parser.exit(1)
+		print(f'Author: {m["author"]}')
+		print(f'Title: {m["name"]}: {m["summary"]}')
+		print(f'URL: {m["home-page"]}')
+		print(f'Version: {m["version"]}')
+		print(f'Date: 2018‒{m["version"].split(".", 3)[3][:4]}')
+
+		if '.dev' in m['version']:
+			print()
+			print('WARNING! You are running a development version. The date range may be incorrect. Please adjust the upper end of the range to the year of the commit.')
+
+		parser.exit()
+
+
 def parse_args():
 	import snscrape.base
 	import snscrape.modules
@@ -200,6 +224,7 @@ def parse_args():
 
 	parser = argparse.ArgumentParser(formatter_class = argparse.ArgumentDefaultsHelpFormatter)
 	parser.add_argument('--version', action = 'version', version = f'snscrape {snscrape.version.__version__}')
+	parser.add_argument('--citation', action = CitationAction, nargs = 0, help = 'Display recommended citation information and exit')
 	parser.add_argument('-v', '--verbose', '--verbosity', dest = 'verbosity', action = 'count', default = 0, help = 'Increase output verbosity')
 	parser.add_argument('--dump-locals', dest = 'dumpLocals', action = 'store_true', default = False, help = 'Dump local variables on serious log messages (warnings or higher)')
 	parser.add_argument('--retry', '--retries', dest = 'retries', type = int, default = 3, metavar = 'N',
@@ -212,14 +237,17 @@ def parse_args():
 	parser.add_argument('--since', type = parse_datetime_arg, metavar = 'DATETIME', help = 'Only return results newer than DATETIME')
 	parser.add_argument('--progress', action = 'store_true', default = False, help = 'Report progress on stderr')
 
-	subparsers = parser.add_subparsers(dest = 'scraper', help = 'The scraper you want to use', required = True)
+	subparsers = parser.add_subparsers(dest = 'scraper', metavar = 'SCRAPER', title = 'scrapers', required = True)
 	classes = snscrape.base.Scraper.__subclasses__()
+	scrapers = {}
 	for cls in classes:
 		if cls.name is not None:
-			subparser = subparsers.add_parser(cls.name, formatter_class = argparse.ArgumentDefaultsHelpFormatter)
-			cls.setup_parser(subparser)
-			subparser.set_defaults(cls = cls)
+			scrapers[cls.name] = cls
 		classes.extend(cls.__subclasses__())
+	for scraper, cls in sorted(scrapers.items()):
+		subparser = subparsers.add_parser(cls.name, help = '', formatter_class = argparse.ArgumentDefaultsHelpFormatter)
+		cls.cli_setup_parser(subparser)
+		subparser.set_defaults(cls = cls)
 
 	args = parser.parse_args()
 
@@ -265,7 +293,7 @@ def main():
 	setup_logging()
 	args = parse_args()
 	configure_logging(args.verbosity, args.dumpLocals)
-	scraper = args.cls.from_args(args)
+	scraper = args.cls.cli_from_args(args)
 
 	i = 0
 	with _dump_locals_on_exception():

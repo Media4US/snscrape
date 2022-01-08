@@ -1,3 +1,6 @@
+__all__ = ['Submission', 'Comment', 'RedditUserScraper', 'RedditSubredditScraper', 'RedditSearchScraper']
+
+
 import dataclasses
 import datetime
 import logging
@@ -9,7 +12,7 @@ import time
 import typing
 
 
-logger = logging.getLogger(__name__)
+_logger = logging.getLogger(__name__)
 
 
 # Most of these fields should never be None, but due to broken data, they sometimes are anyway...
@@ -43,20 +46,23 @@ class Comment(snscrape.base.Item):
 		return self.url
 
 
-class RedditPushshiftScraper(snscrape.base.Scraper):
-	def __init__(self, submissions = True, comments = True, before = None, after = None, **kwargs):
+class _RedditPushshiftScraper(snscrape.base.Scraper):
+	def __init__(self, name, submissions = True, comments = True, before = None, after = None, **kwargs):
 		super().__init__(**kwargs)
+		self._name = name
 		self._submissions = submissions
 		self._comments = comments
 		self._before = before
 		self._after = after
 
+		if not type(self)._validationFunc(self._name):
+			raise ValueError(f'invalid {type(self).name.split("-", 1)[1]} name')
 		if not self._submissions and not self._comments:
 			raise ValueError('At least one of submissions and comments must be True')
 
 	def _handle_rate_limiting(self, r):
 		if r.status_code == 429:
-			logger.info('Got 429 response, sleeping')
+			_logger.info('Got 429 response, sleeping')
 			time.sleep(10)
 			return False, 'rate-limited'
 		if r.status_code != 200:
@@ -125,7 +131,7 @@ class RedditPushshiftScraper(snscrape.base.Scraper):
 					else: # E.g. submission 617p51 but can likely happen for comments as well
 						permalink = f'/comments/{d["link_id"][3:]}/_/{d["id"]}/'
 				else:
-					logger.warning(f'Unable to find or construct permalink')
+					_logger.warning(f'Unable to find or construct permalink')
 					permalink = '/'
 
 		kwargs = {
@@ -194,41 +200,37 @@ class RedditPushshiftScraper(snscrape.base.Scraper):
 					yield from submissionsIter
 					break
 
+	def get_items(self):
+		yield from self._iter_api_submissions_and_comments({type(self)._apiField: self._name})
+
 	@classmethod
-	def _setup_parser_opts(cls, subparser):
+	def cli_setup_parser(cls, subparser):
 		subparser.add_argument('--no-submissions', dest = 'noSubmissions', action = 'store_true', default = False, help = 'Don\'t list submissions')
 		subparser.add_argument('--no-comments', dest = 'noComments', action = 'store_true', default = False, help = 'Don\'t list comments')
 		subparser.add_argument('--before', metavar = 'TIMESTAMP', type = int, help = 'Fetch results before a Unix timestamp')
 		subparser.add_argument('--after', metavar = 'TIMESTAMP', type = int, help = 'Fetch results after a Unix timestamp')
+		name = cls.name.split('-', 1)[1]
+		subparser.add_argument(name, type = snscrape.base.nonempty_string(name))
+
+	@classmethod
+	def cli_from_args(cls, args):
+		name = cls.name.split('-', 1)[1]
+		return cls.cli_construct(args, getattr(args, name), submissions = not args.noSubmissions, comments = not args.noComments, before = args.before, after = args.after)
 
 
-def _make_scraper(name_, validationFunc, apiField):
-	class Scraper(RedditPushshiftScraper):
-		name = f'reddit-{name_}'
-
-		def __init__(self, name, **kwargs):
-			super().__init__(**kwargs)
-			self._name = name
-			if not validationFunc(self._name):
-				raise ValueError(f'invalid {name_} name')
-
-		def get_items(self):
-			yield from self._iter_api_submissions_and_comments({apiField: self._name})
-
-		@classmethod
-		def setup_parser(cls, subparser):
-			super()._setup_parser_opts(subparser)
-			subparser.add_argument(name_)
-
-		@classmethod
-		def from_args(cls, args):
-			return cls(getattr(args, name_), submissions = not args.noSubmissions, comments = not args.noComments, before = args.before, after = args.after, retries = args.retries)
-
-	Scraper.__name__ = f'Reddit{name_.capitalize()}Scraper'
-	Scraper.__qualname__ = Scraper.__name__
-	globals()[Scraper.__name__] = Scraper
+class RedditUserScraper(_RedditPushshiftScraper):
+	name = 'reddit-user'
+	_validationFunc = lambda x: re.match('^[A-Za-z0-9_-]{3,20}$', x)
+	_apiField = 'author'
 
 
-_make_scraper('user', lambda x: re.match('^[A-Za-z0-9_-]{3,20}$', x), 'author')
-_make_scraper('subreddit', lambda x: re.match('^[A-Za-z0-9][A-Za-z0-9_]{2,20}$', x), 'subreddit')
-_make_scraper('search', lambda x: True, 'q')
+class RedditSubredditScraper(_RedditPushshiftScraper):
+	name = 'reddit-subreddit'
+	_validationFunc = lambda x: re.match('^[A-Za-z0-9][A-Za-z0-9_]{2,20}$', x)
+	_apiField = 'subreddit'
+
+
+class RedditSearchScraper(_RedditPushshiftScraper):
+	name = 'reddit-search'
+	_validationFunc = lambda x: True
+	_apiField = 'q'

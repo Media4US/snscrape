@@ -1,3 +1,4 @@
+import os.path
 import setuptools
 
 setuptools.setup(
@@ -10,6 +11,7 @@ setuptools.setup(
 		'License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)',
 		'Programming Language :: Python :: 3.8',
 		'Programming Language :: Python :: 3.9',
+		'Programming Language :: Python :: 3.10',
 	],
 	packages = ['snscrape', 'snscrape.modules'],
 	setup_requires = ['setuptools_scm'],
@@ -19,6 +21,7 @@ setuptools.setup(
 		'lxml',
 		'beautifulsoup4',
 		'pytz; python_version < "3.9.0"',
+		'filelock',
 	],
 	python_requires = '~=3.8',
 	extras_require = {
